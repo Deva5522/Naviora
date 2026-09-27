@@ -1,0 +1,954 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Devanandana Suresh Dashboard - Universal Portals, Maps & Smart AI Chat</title>
+    <!-- Tailwind CSS for modern styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Leaflet CSS for Map -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        body { background-color: #0f172a; color: #f8fafc; overflow-x: hidden; }
+        .card-bg { background-color: #1e293b; border: 1px solid #334155; }
+        .bus-marker { background: #2563eb; border: 2px solid white; border-radius: 50%; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 12px rgba(37, 99, 235, 0.9); font-size: 14px; }
+        .tab-content, .role-view { display: none; }
+        .tab-content.active, .role-view.active { display: flex; flex-direction: column; }
+        .map-container { width: 100%; height: 380px; z-index: 1; border-radius: 8px; }
+        #map-modal { display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.95); z-index: 9999; padding: 20px; flex-direction: column; }
+        #map-modal.active { display: flex; }
+        #fullscreen-map { flex: 1; width: 100%; border-radius: 12px; }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+    <!-- 🔐 LOGIN VIEW (Default Active) -->
+    <div id="login-view" class="role-view active flex-1 items-center justify-center p-6">
+        <div class="card-bg p-8 rounded-2xl shadow-2xl max-w-md w-full space-y-6 border border-slate-700">
+            <div class="text-center space-y-2">
+                <h1 class="text-xl font-extrabold tracking-wide text-cyan-400">TRANSPORT PORTAL LOGIN</h1>
+                <p class="text-xs text-slate-400">Select your role and log in to access your designated dashboard</p>
+            </div>
+
+            <form onsubmit="handleLogin(event)" class="space-y-4">
+                <div>
+                    <label class="block text-xs text-slate-300 mb-1">Select Role Portal</label>
+                    <select id="login-role" class="w-full bg-slate-900 border border-slate-700 rounded p-2.5 text-xs text-white focus:outline-none focus:border-cyan-500 cursor-pointer">
+                        <option value="student">🎓 Student Portal (Bus Tracking, Hall Ticket & Chat)</option>
+                        <option value="driver">👨‍✈️ Driver Portal (Bus 06 Controls, Map & Detours)</option>
+                        <option value="admin">🛡️ Administrative Panel (Fleet, Rerouting & Monitoring)</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-xs text-slate-300 mb-1">Username / ID</label>
+                    <input type="text" id="login-user" required placeholder="Enter ID (e.g., MUT21CS042)" class="w-full bg-slate-900 border border-slate-700 rounded p-2.5 text-xs text-white focus:outline-none focus:border-cyan-500">
+                </div>
+
+                <div>
+                    <label class="block text-xs text-slate-300 mb-1">Secure Password / PIN</label>
+                    <input type="password" id="login-pass" required placeholder="••••••••" class="w-full bg-slate-900 border border-slate-700 rounded p-2.5 text-xs text-white focus:outline-none focus:border-cyan-500">
+                </div>
+
+                <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded text-xs transition shadow-lg">
+                    Secure Login ➔
+                </button>
+            </form>
+            <div class="text-center text-[10px] text-slate-500">
+                Secured Institutional Transport Authentication System
+            </div>
+        </div>
+    </div>
+
+    <!-- 📊 MAIN DASHBOARD APPLICATION VIEW -->
+    <div id="dashboard-app-view" class="role-view flex-col flex-1">
+        
+        <!-- Top Navigation Bar -->
+        <header class="card-bg px-6 py-4 flex flex-wrap justify-between items-center shadow-md z-20 gap-4">
+            <div class="flex items-center space-x-4 flex-wrap">
+                <h1 id="header-title" class="text-sm md:text-base font-bold tracking-wide text-cyan-400">DEVANANDANA SURESH DASHBOARD</h1>
+                <nav id="nav-container" class="flex flex-wrap space-x-1">
+                    <!-- Dynamically populated based on login role -->
+                </nav>
+            </div>
+            <div class="flex items-center space-x-3">
+                <span id="role-badge" class="bg-amber-500 text-slate-950 font-bold px-3 py-1 rounded text-xs uppercase">PASS</span>
+                <button onclick="logout()" class="bg-red-600 hover:bg-red-700 text-white font-bold px-4 py-1 rounded text-xs uppercase transition">Logout</button>
+            </div>
+        </header>
+
+        <!-- Fullscreen Map Modal -->
+        <div id="map-modal">
+            <div class="flex justify-between items-center mb-3 px-2">
+                <h2 class="text-white font-bold text-base">🔍 Enlarged Route Map & Active Detours — Bus 06</h2>
+                <button onclick="toggleFullscreenMap()" class="bg-red-600 hover:bg-red-700 text-white text-xs font-bold px-4 py-2 rounded transition">Close Enlarged Map</button>
+            </div>
+            <div id="fullscreen-map"></div>
+        </div>
+
+        <!-- TAB 1: BUS TRACKING VIEW (STUDENT) -->
+        <main id="tab-bus" class="tab-content flex-1 p-6 max-w-5xl mx-auto w-full space-y-6">
+            <div class="card-bg rounded-xl overflow-hidden relative flex flex-col shadow-lg w-full">
+                <div class="bg-slate-800 px-4 py-3 text-xs font-semibold text-slate-300 flex justify-between items-center border-b border-slate-700">
+                    <span id="map-banner-text">LIVE ROUTE: Kattanam ➔ Karimulakal ➔ Charummodu ➔ Kochalammodu ➔ Kollakadavu ➔ College • Bus 06 Active</span>
+                    <button onclick="toggleFullscreenMap()" class="bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold px-3 py-1.5 rounded transition flex items-center gap-1">
+                        🔍 Enlarge Map
+                    </button>
+                </div>
+                <div class="p-4">
+                    <div id="map" class="map-container"></div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 w-full">
+                <div class="card-bg p-4 rounded-xl shadow-md space-y-2">
+                    <div class="flex justify-between items-center">
+                        <h2 class="text-sm font-bold flex items-center gap-2 text-yellow-400">⚡ Live Speed & Traffic</h2>
+                        <span id="traffic-status-pill" class="bg-emerald-500 text-slate-950 text-[10px] font-bold px-2 py-0.5 rounded">Smooth Flow</span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2 text-xs pt-1">
+                        <div class="bg-slate-900 p-2 rounded border border-slate-800">
+                            <span class="text-slate-400 block text-[10px]">Current Speed</span>
+                            <span class="text-white font-extrabold text-base">42 km/h</span>
+                        </div>
+                        <div class="bg-slate-900 p-2 rounded border border-slate-800">
+                            <span class="text-slate-400 block text-[10px]">Road Congestion</span>
+                            <span id="congestion-text" class="text-emerald-400 font-bold">Low Traffic</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card-bg p-4 rounded-xl shadow-md flex justify-between items-center">
+                    <div class="flex items-center gap-3">
+                        <div class="text-2xl">⛅</div>
+                        <div>
+                            <h3 class="text-xs font-bold text-slate-200">Bus 06 Corridor</h3>
+                            <p class="text-[11px] text-slate-400">28°C • Partly Cloudy • Dry Roads</p>
+                        </div>
+                    </div>
+                    <span class="text-[10px] bg-slate-900 text-cyan-400 px-2 py-1 rounded border border-slate-800 shrink-0">Live Weather</span>
+                </div>
+
+                <div class="card-bg p-4 rounded-xl shadow-md">
+                    <div class="flex justify-between items-center mb-2">
+                        <h2 class="text-sm font-bold flex items-center gap-2 text-pink-400">🕒 Timetable Arrival Predictor</h2>
+                        <span class="bg-emerald-500 text-slate-950 text-xs font-bold px-2 py-0.5 rounded shrink-0">ON TIME</span>
+                    </div>
+                    <p class="text-xs text-slate-300 mb-1">📚 CSE (3rd Year) — 09:15 AM AI Lab</p>
+                    <p class="text-xs text-slate-400">Bus reaches college at 08:50 AM (25 mins buffer)</p>
+                </div>
+
+                <div class="card-bg p-4 rounded-xl shadow-md">
+                    <h2 class="text-sm font-bold flex items-center gap-2 text-amber-400 mb-2">⚠️ Boarding Stop Alert</h2>
+                    <select id="boarding-select" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-xs text-slate-200 focus:outline-none focus:border-blue-500 cursor-pointer"></select>
+                </div>
+            </div>
+
+            <div class="card-bg p-5 rounded-xl shadow-md space-y-3 w-full">
+                <div class="flex justify-between items-center">
+                    <h2 class="text-sm font-bold flex items-center gap-2 text-cyan-400">🤖 AI Arrival Prediction Engine</h2>
+                    <span id="bus-status-badge" class="bg-blue-600 text-white text-[10px] px-2 py-0.5 rounded shrink-0">In Transit</span>
+                </div>
+                <div>
+                    <div id="eta-display" class="text-3xl font-extrabold text-white">--</div>
+                    <div id="eta-label" class="text-xs text-slate-400">Expected Arrival at Next Stop</div>
+                </div>
+                <div class="text-xs text-slate-300 space-y-2 pt-2 border-t border-slate-700 flex flex-wrap justify-between items-center gap-4">
+                    <div class="space-y-1">
+                        <p id="current-loc-text">📍 Current Location: Kattanam</p>
+                        <p id="next-stop-text">🔜 Next Stop: Karimulakal</p>
+                    </div>
+                    <div class="flex items-center gap-4">
+                        <div class="bg-slate-900 p-2.5 rounded border border-slate-800">
+                            <span class="text-cyan-400 font-semibold block text-[11px]">🏫 College Arrival:</span>
+                            <span id="college-eta-display" class="text-white font-bold">--</span>
+                        </div>
+                        <button onclick="callDriver()" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2.5 rounded flex items-center gap-1 shadow transition shrink-0">
+                            📞 Call Driver
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 w-full">
+                <div class="card-bg p-4 rounded-xl shadow-md flex justify-between items-center border-red-900/50">
+                    <div>
+                        <h3 class="text-xs font-bold text-red-400">🚨 Emergency Assistance</h3>
+                        <p class="text-[10px] text-slate-400">Instant alert to college transport cell</p>
+                    </div>
+                    <button onclick="triggerSOS()" class="bg-red-600 hover:bg-red-700 text-white font-bold text-xs px-4 py-2 rounded shadow transition animate-pulse shrink-0">
+                        SOS ALERT
+                    </button>
+                </div>
+
+                <div class="card-bg p-4 rounded-xl shadow-md space-y-3">
+                    <div class="flex justify-between items-center">
+                        <h2 class="text-sm font-bold flex items-center gap-2 text-emerald-400">🪑 Smart Seat Occupancy</h2>
+                        <span id="seat-status-badge" class="bg-emerald-900 text-emerald-300 text-xs font-bold px-2 py-0.5 rounded shrink-0">Seats Available</span>
+                    </div>
+                    <div class="flex justify-between text-xs text-slate-300">
+                        <span id="seat-count-text">Occupied: <strong class="text-white">18</strong> / 40</span>
+                        <span id="free-seat-text" class="text-emerald-400 font-bold">22 Free Seats</span>
+                    </div>
+                    <div class="w-full bg-slate-700 h-2 rounded-full overflow-hidden">
+                        <div id="seat-progress-bar" class="bg-emerald-500 h-full transition-all duration-300" style="width: 45%;"></div>
+                    </div>
+                    <div class="flex gap-2 pt-1">
+                        <button onclick="modifySeats(1)" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-1.5 rounded text-xs font-bold transition">+ Board Bus</button>
+                        <button onclick="modifySeats(-1)" class="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 py-1.5 rounded text-xs font-bold transition">- Exit Bus</button>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- TAB 2: MISSING ITEMS -->
+        <main id="tab-missing" class="tab-content flex-1 p-6 max-w-4xl mx-auto w-full space-y-6">
+            <div class="card-bg p-6 rounded-xl shadow-lg w-full">
+                <h2 class="text-lg font-bold text-cyan-400 mb-2">📦 Report or Claim Missing Items on Bus 06</h2>
+                <p class="text-xs text-slate-400 mb-4">Left something behind? Submit a report below or check found items logged by the conductor.</p>
+                
+                <form onsubmit="submitMissingItem(event)" class="space-y-4 bg-slate-900 p-4 rounded-lg border border-slate-800">
+                    <div>
+                        <label class="block text-xs text-slate-300 mb-1">Item Name / Description</label>
+                        <input type="text" id="item-name" required placeholder="e.g., Black Umbrella, Calculator, Water Bottle" class="w-full bg-slate-800 border border-slate-700 rounded p-2 text-xs text-white focus:outline-none focus:border-cyan-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-slate-300 mb-1">Additional Details / Contact Info</label>
+                        <textarea id="item-details" rows="2" placeholder="Describe color, brand, or where you sat..." class="w-full bg-slate-800 border border-slate-700 rounded p-2 text-xs text-white focus:outline-none focus:border-cyan-500"></textarea>
+                    </div>
+                    <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2 rounded text-xs transition">Submit Missing Item Report</button>
+                </form>
+
+                <div class="mt-6">
+                    <h3 class="text-sm font-bold text-slate-300 mb-3">Recently Logged Lost & Found Items</h3>
+                    <div id="missing-items-list" class="space-y-2 text-xs">
+                        <div class="bg-slate-900 p-3 rounded border border-slate-800 flex justify-between items-center">
+                            <div>
+                                <span class="font-bold text-white">Blue Water Bottle</span> — <span class="text-slate-400">Found near Charummodu stop</span>
+                            </div>
+                            <span class="bg-amber-500 text-slate-950 font-bold px-2 py-0.5 rounded text-[10px]">With Conductor</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- TAB 3: HALL TICKET -->
+        <main id="tab-hallticket" class="tab-content flex-1 p-6 max-w-4xl mx-auto w-full space-y-6">
+            <div class="card-bg p-6 rounded-xl shadow-lg w-full">
+                <div class="flex justify-between items-center mb-4">
+                    <div>
+                        <h2 class="text-lg font-bold text-cyan-400">🎫 Examination Hall Ticket & Bus Seating Allocation</h2>
+                        <p class="text-xs text-slate-400">Verified institutional pass and designated exam seating layout.</p>
+                    </div>
+                    <span class="bg-emerald-500 text-slate-950 font-bold px-3 py-1 rounded text-xs">VERIFIED SEAT</span>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-900 p-5 rounded-lg border border-slate-800">
+                    <div class="space-y-3 text-xs">
+                        <p><strong class="text-slate-400">Student Name:</strong> <span class="text-white font-bold text-sm">Devanandana Suresh</span></p>
+                        <p><strong class="text-slate-400">Register Number:</strong> <span class="text-white">MUT21CS042</span></p>
+                        <p><strong class="text-slate-400">Department:</strong> <span class="text-white">B.Tech Computer Science & Engineering</span></p>
+                        <p><strong class="text-slate-400">Exam Center:</strong> <span class="text-white">St. Thomas College of Engineering, Kozhuvalloor</span></p>
+                    </div>
+                    <div class="bg-slate-800 p-4 rounded border border-slate-700 flex flex-col justify-center items-center text-center space-y-2">
+                        <div class="text-cyan-400 font-bold text-sm">Hall No: LH-304 (Second Floor)</div>
+                        <div class="text-white font-extrabold text-2xl bg-slate-900 px-4 py-2 rounded border border-slate-600 w-full">Seat Bench: #14</div>
+                        <p class="text-[11px] text-slate-400">Bus 06 priority seating assigned near front row.</p>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- TAB 4: DRIVER DASHBOARD -->
+        <main id="tab-driver" class="tab-content flex-1 p-6 max-w-5xl mx-auto w-full space-y-6">
+            <div class="card-bg p-6 rounded-xl shadow-lg w-full space-y-5">
+                <div class="flex justify-between items-center border-b border-slate-700 pb-3">
+                    <div>
+                        <h2 class="text-lg font-bold text-amber-400">👨‍✈️ Driver Control Panel — Bus 06</h2>
+                        <p class="text-xs text-slate-400">Driver: Suresh Kumar • Route: Kattanam to St. Thomas College</p>
+                    </div>
+                    <span class="bg-amber-500 text-slate-950 font-bold px-3 py-1 rounded text-xs">ONLINE / ACTIVE</span>
+                </div>
+
+                <!-- Embedded Live Map in Driver Dashboard -->
+                <div class="card-bg rounded-xl overflow-hidden relative flex flex-col shadow-md w-full">
+                    <div class="bg-slate-800 px-4 py-2 text-xs font-semibold text-slate-300 flex justify-between items-center border-b border-slate-700">
+                        <span>LIVE GPS TELEMETRY & ROUTE MAP</span>
+                    </div>
+                    <div class="p-3">
+                        <div id="driver-map" class="map-container"></div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="bg-slate-900 p-4 rounded-lg border border-slate-800 space-y-3">
+                        <h3 class="text-sm font-bold text-cyan-300">📍 Broadcast Current Status</h3>
+                        <div>
+                            <label class="block text-xs text-slate-400 mb-1">Select Current Location Checkpoint</label>
+                            <select id="driver-checkpoint" class="w-full bg-slate-800 border border-slate-700 rounded p-2 text-xs text-white">
+                                <option>1. Kattanam</option>
+                                <option>2. Karimulakal</option>
+                                <option>3. Charummodu</option>
+                                <option>4. Kochalammodu</option>
+                                <option>5. Kollakadavu</option>
+                                <option>6. St. Thomas College</option>
+                            </select>
+                        </div>
+                        <button onclick="driverUpdateStatus()" class="w-full bg-amber-600 hover:bg-amber-700 text-slate-950 font-bold py-2 rounded text-xs transition">Update GPS Broadcast</button>
+                    </div>
+
+                    <div class="bg-slate-900 p-4 rounded-lg border border-slate-800 space-y-3">
+                        <h3 class="text-sm font-bold text-emerald-300">🪑 Manage Seating & Boarding</h3>
+                        <div class="flex justify-between items-center text-xs text-slate-300 pt-2">
+                            <span>Current Occupancy:</span>
+                            <span id="driver-seat-display" class="font-bold text-white text-sm">18 / 40 Seats</span>
+                        </div>
+                        <div class="flex gap-2 pt-2">
+                            <button onclick="modifySeats(1)" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded text-xs font-bold transition">+ Board Student</button>
+                            <button onclick="modifySeats(-1)" class="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 py-2 rounded text-xs font-bold transition">- Drop Student</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Rerouting Control Box -->
+                <div class="bg-slate-900 p-4 rounded-lg border border-amber-600/50 space-y-3">
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <h4 class="text-sm font-bold text-amber-400">🚧 Traffic / Road Closure Detour Control</h4>
+                            <p class="text-[11px] text-slate-400">Toggle emergency bypass to switch Bus 06 to the alternate corridor</p>
+                        </div>
+                        <span id="detour-status-pill" class="bg-emerald-900 text-emerald-300 text-[10px] font-bold px-2 py-0.5 rounded">Standard Route</span>
+                    </div>
+                    <button onclick="toggleDetourRoute()" id="detour-btn" class="w-full bg-amber-600 hover:bg-amber-700 text-slate-950 font-bold py-2.5 rounded text-xs transition">
+                        🚨 Activate Alternate Reroute (Bypass Traffic)
+                    </button>
+                </div>
+
+                <div class="bg-slate-900 p-4 rounded-lg border border-red-900/50 flex justify-between items-center">
+                    <div>
+                        <h4 class="text-sm font-bold text-red-400">🚨 Driver Emergency Broadcast</h4>
+                        <p class="text-[11px] text-slate-400">Trigger mechanical breakdown or medical emergency alert to transport desk</p>
+                    </div>
+                    <button onclick="alert('🚨 EMERGENCY BROADCAST SENT: College transport desk & admin notified with Bus 06 telemetry.')" class="bg-red-600 hover:bg-red-700 text-white text-xs font-bold px-4 py-2.5 rounded shadow animate-pulse">
+                        EMERGENCY ALERT
+                    </button>
+                </div>
+            </div>
+        </main>
+
+        <!-- TAB 5: ADMIN DASHBOARD -->
+        <main id="tab-admin" class="tab-content flex-1 p-6 max-w-5xl mx-auto w-full space-y-6">
+            <div class="card-bg p-6 rounded-xl shadow-lg w-full space-y-6">
+                <div class="flex justify-between items-center border-b border-slate-700 pb-3">
+                    <div>
+                        <h2 class="text-lg font-bold text-purple-400">🛡️ Transport Administrative Control Center</h2>
+                        <p class="text-xs text-slate-400">Real-time fleet monitoring, route management, and security oversight</p>
+                    </div>
+                    <span class="bg-purple-600 text-white font-bold px-3 py-1 rounded text-xs">ADMIN MODE</span>
+                </div>
+
+                <!-- Embedded Live Map in Admin Dashboard -->
+                <div class="card-bg rounded-xl overflow-hidden relative flex flex-col shadow-md w-full">
+                    <div class="bg-slate-800 px-4 py-2 text-xs font-semibold text-slate-300 flex justify-between items-center border-b border-slate-700">
+                        <span>FLEET-WIDE OVERVIEW MAP & TELEMETRY</span>
+                    </div>
+                    <div class="p-3">
+                        <div id="admin-map" class="map-container"></div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4 text-xs">
+                    <div class="bg-slate-900 p-4 rounded-lg border border-slate-800 space-y-1">
+                        <span class="text-slate-400">Active Buses</span>
+                        <span class="text-2xl font-extrabold text-white block">1 / 1</span>
+                        <span class="text-emerald-400 text-[10px]">Bus 06 on schedule</span>
+                    </div>
+                    <div class="bg-slate-900 p-4 rounded-lg border border-slate-800 space-y-1">
+                        <span class="text-slate-400">Total Students Boarded</span>
+                        <span id="admin-seat-display" class="text-2xl font-extrabold text-cyan-400 block">18</span>
+                        <span class="text-slate-400 text-[10px]">Across all checkpoints</span>
+                    </div>
+                    <div class="bg-slate-900 p-4 rounded-lg border border-slate-800 space-y-1">
+                        <span class="text-slate-400">Average Fleet Speed</span>
+                        <span class="text-2xl font-extrabold text-yellow-400 block">38 km/h</span>
+                        <span class="text-amber-400 text-[10px]">Adjusted for detour</span>
+                    </div>
+                    <div class="bg-slate-900 p-4 rounded-lg border border-slate-800 space-y-1">
+                        <span class="text-slate-400">Route Status</span>
+                        <span id="admin-route-status" class="text-2xl font-extrabold text-emerald-400 block">NORMAL</span>
+                        <span class="text-slate-400 text-[10px]">No congestion reported</span>
+                    </div>
+                </div>
+
+                <!-- Admin Reroute Control Center -->
+                <div class="bg-slate-900 p-5 rounded-lg border border-purple-900/60 space-y-3">
+                    <h3 class="text-sm font-bold text-purple-300">🔀 Fleet-Wide Emergency Rerouting Console</h3>
+                    <p class="text-xs text-slate-400">If road blockades or severe traffic jams occur on SH-183, dispatch an instant GPS bypass to Bus 06.</p>
+                    <div class="flex flex-wrap gap-3 pt-1">
+                        <button onclick="toggleDetourRoute()" id="admin-detour-btn" class="bg-amber-600 hover:bg-amber-700 text-slate-950 font-bold px-4 py-2 rounded text-xs transition">
+                            🚨 Trigger Detour / Bypass Route
+                        </button>
+                        <button onclick="alert('📢 Broadcast sent to all passengers: Bus 06 is operating under active traffic monitoring.')" class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2 rounded text-xs transition">
+                            📢 Broadcast Advisory to Students
+                        </button>
+                    </div>
+                </div>
+
+                <div class="bg-slate-900 p-5 rounded-lg border border-slate-800 space-y-4">
+                    <h3 class="text-sm font-bold text-slate-200">🚌 Active Fleet Status & Management</h3>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-xs">
+                            <thead class="bg-slate-800 text-slate-400">
+                                <tr>
+                                    <th class="p-3">Bus ID</th>
+                                    <th class="p-3">Driver</th>
+                                    <th class="p-3">Current Location</th>
+                                    <th class="p-3">Occupancy</th>
+                                    <th class="p-3">Route Path Status</th>
+                                    <th class="p-3">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-800">
+                                <tr>
+                                    <td class="p-3 font-bold text-white">Bus 06</td>
+                                    <td class="p-3">Suresh Kumar</td>
+                                    <td class="p-3 text-cyan-300">En Route</td>
+                                    <td class="p-3"><span id="admin-table-occupancy">18</span> / 40</td>
+                                    <td class="p-3"><span id="admin-table-path-status" class="bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded">Standard Route</span></td>
+                                    <td class="p-3">
+                                        <button onclick="alert('Ping sent to Bus 06 driver console.')" class="bg-blue-600 hover:bg-blue-700 text-white px-2.5 py-1 rounded">Ping Bus</button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+    </div>
+
+    <!-- 🤖 INTEGRATED AI CHATBOT WIDGET -->
+    <div id="chatbot-container" class="fixed bottom-5 right-5 z-50">
+        <!-- Chat Toggle Button -->
+        <button onclick="toggleChatbot()" id="chat-toggle-btn" class="bg-cyan-500 hover:bg-cyan-600 text-slate-950 font-extrabold px-4 py-3 rounded-full shadow-2xl flex items-center gap-2 transition transform hover:scale-105">
+            💬 Ask Transport AI
+        </button>
+
+        <!-- Chat Window (Hidden by default) -->
+        <div id="chat-window" class="hidden card-bg w-80 md:w-96 rounded-2xl shadow-2xl border border-slate-700 flex flex-col overflow-hidden h-[450px]">
+            <!-- Chat Header -->
+            <div class="bg-slate-800 px-4 py-3 flex justify-between items-center border-b border-slate-700">
+                <div class="flex items-center gap-2">
+                    <div class="w-2.5 h-2.5 bg-emerald-400 rounded-full animate-ping"></div>
+                    <span class="text-xs font-bold text-cyan-400">Transport Assistant Bot</span>
+                </div>
+                <button onclick="toggleChatbot()" class="text-slate-400 hover:text-white font-bold text-sm">✕</button>
+            </div>
+
+            <!-- Chat Messages Area -->
+            <div id="chat-messages" class="flex-1 p-3 overflow-y-auto space-y-3 text-xs">
+                <div class="bg-slate-800 p-2.5 rounded-lg rounded-tl-none text-slate-200 max-w-[85%]">
+                    👋 Hello Devanandana! I am your AI transport assistant. Ask me anything about Bus 06 timings, routes, seat availability, drivers, hall tickets, or missing items!
+                </div>
+            </div>
+
+            <!-- Chat Input Area -->
+            <div class="p-3 bg-slate-900 border-t border-slate-800 flex gap-2">
+                <input type="text" id="chat-input" onkeypress="handleChatKey(event)" placeholder="Type any question..." class="flex-1 bg-slate-800 border border-slate-700 rounded p-2 text-xs text-white focus:outline-none focus:border-cyan-500">
+                <button onclick="sendChatMessage()" class="bg-cyan-600 hover:bg-cyan-700 text-white px-3 py-2 rounded text-xs font-bold transition">Send</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        let currentRole = 'student';
+        let currentOccupiedSeats = 18;
+        const totalSeats = 40;
+        let isDetourActive = false;
+
+        // Standard Route Path
+        const standardOutboundPath = [
+            [9.1764, 76.5651], // Kattanam
+            [9.1718, 76.5957], // Karimulakal
+            [9.1744, 76.6078], // Charummodu
+            [9.2446, 76.5852], // Kochalammodu
+            [9.2550, 76.5873], // Kollakadavu
+            [9.2771, 76.6260]  // St. Thomas College
+        ];
+
+        // Alternate Detour Path
+        const detourOutboundPath = [
+            [9.1764, 76.5651], // Kattanam
+            [9.1850, 76.5500], // Detour Western Bypass Node A
+            [9.2200, 76.5550], // Detour Western Bypass Node B
+            [9.2500, 76.5700], // Rejoining near Kollakadavu
+            [9.2771, 76.6260]  // St. Thomas College
+        ];
+
+        let outboundPath = [...standardOutboundPath];
+        let returnPath = [...outboundPath].slice(0, -1).reverse();
+        let routePath = [...outboundPath, ...returnPath];
+
+        let map, driverMap, adminMap;
+        let routeLine, driverRouteLine, adminRouteLine;
+        let busMarker, driverBusMarker, adminBusMarker;
+
+        function initAllMaps() {
+            if (!map) {
+                map = L.map('map').setView([9.2200, 76.6000], 12);
+                L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { maxZoom: 19 }).addTo(map);
+            }
+            if (!driverMap) {
+                driverMap = L.map('driver-map').setView([9.2200, 76.6000], 12);
+                L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { maxZoom: 19 }).addTo(driverMap);
+            }
+            if (!adminMap) {
+                adminMap = L.map('admin-map').setView([9.2200, 76.6000], 12);
+                L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { maxZoom: 19 }).addTo(adminMap);
+            }
+            renderMapLayers();
+        }
+
+        const baseStops = [
+            { id: "kattanam", name: "Kattanam", coords: [9.1764, 76.5651] },
+            { id: "karimulakal", name: "Karimulakal", coords: [9.1718, 76.5957] },
+            { id: "charummodu", name: "Charummodu", coords: [9.1744, 76.6078] },
+            { id: "kochalammodu", name: "Kochalammodu", coords: [9.2446, 76.5852] },
+            { id: "kollakadavu", name: "Kollakadavu", coords: [9.2550, 76.5873] },
+            { id: "college", name: "St. Thomas College", coords: [9.2771, 76.6260] }
+        ];
+
+        const selectElem = document.getElementById('boarding-select');
+        baseStops.forEach((stop, index) => {
+            const option = document.createElement('option');
+            option.value = index;
+            option.text = stop.name;
+            selectElem.appendChild(option);
+        });
+
+        const busIconHtml = '<div class="bus-marker">🚌</div>';
+        const busIcon = L.divIcon({ className: 'custom-bus-icon', html: busIconHtml, iconSize: [32, 32], iconAnchor: [16, 16] });
+
+        function renderMapLayers() {
+            if(routeLine) map.removeLayer(routeLine);
+            if(driverRouteLine) driverMap.removeLayer(driverRouteLine);
+            if(adminRouteLine) adminMap.removeLayer(adminRouteLine);
+
+            routeLine = L.polyline(routePath, { color: isDetourActive ? '#f59e0b' : '#2563eb', weight: 5, opacity: 0.85 }).addTo(map);
+            driverRouteLine = L.polyline(routePath, { color: isDetourActive ? '#f59e0b' : '#2563eb', weight: 5, opacity: 0.85 }).addTo(driverMap);
+            adminRouteLine = L.polyline(routePath, { color: isDetourActive ? '#f59e0b' : '#2563eb', weight: 5, opacity: 0.85 }).addTo(adminMap);
+
+            baseStops.forEach(stop => {
+                L.marker(stop.coords).addTo(map).bindPopup(stop.name);
+                L.marker(stop.coords).addTo(driverMap).bindPopup(stop.name);
+                L.marker(stop.coords).addTo(adminMap).bindPopup(stop.name);
+            });
+
+            if(!busMarker) busMarker = L.marker(routePath[0], { icon: busIcon }).addTo(map).bindPopup("<b>Bus 06</b>");
+            if(!driverBusMarker) driverBusMarker = L.marker(routePath[0], { icon: busIcon }).addTo(driverMap).bindPopup("<b>Bus 06</b>");
+            if(!adminBusMarker) adminBusMarker = L.marker(routePath[0], { icon: busIcon }).addTo(adminMap).bindPopup("<b>Bus 06</b>");
+
+            map.fitBounds(routeLine.getBounds(), { padding: [30, 30] });
+            driverMap.fitBounds(driverRouteLine.getBounds(), { padding: [30, 30] });
+            adminMap.fitBounds(adminRouteLine.getBounds(), { padding: [30, 30] });
+        }
+
+        function toggleDetourRoute() {
+            isDetourActive = !isDetourActive;
+            
+            if (isDetourActive) {
+                outboundPath = [...detourOutboundPath];
+                alert("🚨 DETOUR ACTIVATED: Bus 06 rerouted via Western Bypass corridor.");
+            } else {
+                outboundPath = [...standardOutboundPath];
+                alert("✅ Standard route restored for Bus 06.");
+            }
+
+            returnPath = [...outboundPath].slice(0, -1).reverse();
+            routePath = [...outboundPath, ...returnPath];
+            currentSegment = 0;
+            progress = 0;
+
+            renderMapLayers();
+            if (fullscreenMap) {
+                fullscreenMap.eachLayer(layer => { if (layer instanceof L.Polyline) fullscreenMap.removeLayer(layer); });
+                L.polyline(routePath, { color: isDetourActive ? '#f59e0b' : '#2563eb', weight: 5 }).addTo(fullscreenMap);
+            }
+            updateDetourUI();
+        }
+
+        function updateDetourUI() {
+            const banner = document.getElementById('map-banner-text');
+            const trafficPill = document.getElementById('traffic-status-pill');
+            const congestionText = document.getElementById('congestion-text');
+            const detourPill = document.getElementById('detour-status-pill');
+            const detourBtn = document.getElementById('detour-btn');
+            const adminDetourBtn = document.getElementById('admin-detour-btn');
+            const adminRouteStatus = document.getElementById('admin-route-status');
+            const adminTablePath = document.getElementById('admin-table-path-status');
+
+            if (isDetourActive) {
+                banner.innerText = "⚠️ ACTIVE DETOUR: Bus 06 Rerouted via Western Bypass Corridor";
+                trafficPill.innerText = "Detour Active";
+                trafficPill.className = "bg-amber-500 text-slate-950 text-[10px] font-bold px-2 py-0.5 rounded";
+                congestionText.innerText = "Rerouted / Clear";
+                congestionText.className = "text-amber-400 font-bold";
+                detourPill.innerText = "Detour Active";
+                detourPill.className = "bg-amber-900 text-amber-300 text-[10px] font-bold px-2 py-0.5 rounded";
+                detourBtn.innerText = "✅ Restore Standard Route";
+                detourBtn.className = "w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 rounded text-xs transition";
+                if(adminDetourBtn) adminDetourBtn.innerText = "✅ Restore Standard Route";
+                if(adminRouteStatus) { adminRouteStatus.innerText = "REROUTED"; adminRouteStatus.className = "text-2xl font-extrabold text-amber-400 block"; }
+                if(adminTablePath) { adminTablePath.innerText = "Detour Active"; adminTablePath.className = "bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded"; }
+            } else {
+                banner.innerText = "LIVE ROUTE: Kattanam ➔ Karimulakal ➔ Charummodu ➔ Kochalammodu ➔ Kollakadavu ➔ College • Bus 06 Active";
+                trafficPill.innerText = "Smooth Flow";
+                trafficPill.className = "bg-emerald-500 text-slate-950 text-[10px] font-bold px-2 py-0.5 rounded";
+                congestionText.innerText = "Low Traffic";
+                congestionText.className = "text-emerald-400 font-bold";
+                detourPill.innerText = "Standard Route";
+                detourPill.className = "bg-emerald-900 text-emerald-300 text-[10px] font-bold px-2 py-0.5 rounded";
+                detourBtn.innerText = "🚨 Activate Alternate Reroute (Bypass Traffic)";
+                detourBtn.className = "w-full bg-amber-600 hover:bg-amber-700 text-slate-950 font-bold py-2.5 rounded text-xs transition";
+                if(adminDetourBtn) adminDetourBtn.innerText = "🚨 Trigger Detour / Bypass Route";
+                if(adminRouteStatus) { adminRouteStatus.innerText = "NORMAL"; adminRouteStatus.className = "text-2xl font-extrabold text-emerald-400 block"; }
+                if(adminTablePath) { adminTablePath.innerText = "Standard Route"; adminTablePath.className = "bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded"; }
+            }
+        }
+
+        function modifySeats(change) {
+            currentOccupiedSeats += change;
+            if (currentOccupiedSeats > totalSeats) currentOccupiedSeats = totalSeats;
+            if (currentOccupiedSeats < 0) currentOccupiedSeats = 0;
+            updateSeatUI();
+        }
+
+        function updateSeatUI() {
+            const freeSeats = totalSeats - currentOccupiedSeats;
+            const percentage = (currentOccupiedSeats / totalSeats) * 100;
+
+            document.getElementById('seat-count-text').innerHTML = `Occupied: <strong class="text-white">${currentOccupiedSeats}</strong> / ${totalSeats}`;
+            document.getElementById('free-seat-text').innerText = `${freeSeats} Free Seats`;
+            document.getElementById('seat-progress-bar').style.width = `${percentage}%`;
+            
+            const badge = document.getElementById('seat-status-badge');
+            if (freeSeats === 0) {
+                badge.innerText = "BUS FULL";
+                badge.className = "bg-red-900 text-red-300 text-xs font-bold px-2 py-0.5 rounded shrink-0";
+            } else {
+                badge.innerText = "Seats Available";
+                badge.className = "bg-emerald-900 text-emerald-300 text-xs font-bold px-2 py-0.5 rounded shrink-0";
+            }
+
+            if(document.getElementById('driver-seat-display')) document.getElementById('driver-seat-display').innerText = `${currentOccupiedSeats} / ${totalSeats} Seats`;
+            if(document.getElementById('admin-seat-display')) document.getElementById('admin-seat-display').innerText = currentOccupiedSeats;
+            if(document.getElementById('admin-table-occupancy')) document.getElementById('admin-table-occupancy').innerText = currentOccupiedSeats;
+        }
+
+        function handleLogin(event) {
+            event.preventDefault();
+            const role = document.getElementById('login-role').value;
+            const user = document.getElementById('login-user').value;
+            currentRole = role;
+
+            document.getElementById('login-view').classList.remove('active');
+            document.getElementById('dashboard-app-view').classList.add('active');
+
+            const navContainer = document.getElementById('nav-container');
+            navContainer.innerHTML = '';
+
+            const headerTitle = document.getElementById('header-title');
+            const roleBadge = document.getElementById('role-badge');
+
+            if (role === 'student') {
+                headerTitle.innerText = `DEVANANDANA SURESH DASHBOARD (${user})`;
+                roleBadge.innerText = 'STUDENT PASS';
+                roleBadge.className = 'bg-amber-500 text-slate-950 font-bold px-3 py-1 rounded text-xs uppercase';
+                
+                navContainer.innerHTML = `
+                    <button id="nav-bus" onclick="switchTab('bus')" class="bg-blue-600 text-white px-3 py-1.5 rounded text-xs font-medium transition">Bus Tracking</button>
+                    <button id="nav-missing" onclick="switchTab('missing')" class="hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded text-xs font-medium transition">Missing Items</button>
+                    <button id="nav-hallticket" onclick="switchTab('hallticket')" class="hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded text-xs font-medium transition">Hall Ticket</button>
+                `;
+                switchTab('bus');
+            } else if (role === 'driver') {
+                headerTitle.innerText = `DRIVER CONSOLE — BUS 06 (${user})`;
+                roleBadge.innerText = 'DRIVER ACTIVE';
+                roleBadge.className = 'bg-amber-600 text-slate-950 font-bold px-3 py-1 rounded text-xs uppercase';
+
+                navContainer.innerHTML = `
+                    <button id="nav-driver" onclick="switchTab('driver')" class="bg-amber-600 text-slate-950 px-3 py-1.5 rounded text-xs font-bold transition">Driver Control Panel</button>
+                `;
+                switchTab('driver');
+            } else if (role === 'admin') {
+                headerTitle.innerText = `TRANSPORT ADMIN CENTER (${user})`;
+                roleBadge.innerText = 'ADMINISTRATOR';
+                roleBadge.className = 'bg-purple-600 text-white font-bold px-3 py-1 rounded text-xs uppercase';
+
+                navContainer.innerHTML = `
+                    <button id="nav-admin" onclick="switchTab('admin')" class="bg-purple-600 text-white px-3 py-1.5 rounded text-xs font-bold transition">Control Center</button>
+                `;
+                switchTab('admin');
+            }
+            updateSeatUI();
+            updateDetourUI();
+            setTimeout(() => { initAllMaps(); }, 200);
+        }
+
+        function logout() {
+            document.getElementById('dashboard-app-view').classList.remove('active');
+            document.getElementById('login-view').classList.add('active');
+            document.getElementById('login-pass').value = '';
+        }
+
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('nav button').forEach(el => {
+                el.classList.remove('bg-blue-600', 'text-white', 'bg-amber-600', 'bg-purple-600', 'text-slate-950');
+                el.classList.add('hover:bg-slate-700', 'text-slate-300');
+            });
+
+            if (tabName === 'bus') {
+                document.getElementById('tab-bus').classList.add('active');
+                if(document.getElementById('nav-bus')) {
+                    document.getElementById('nav-bus').classList.add('bg-blue-600', 'text-white');
+                    document.getElementById('nav-bus').classList.remove('hover:bg-slate-700', 'text-slate-300');
+                }
+                setTimeout(() => { if(map) map.invalidateSize(); }, 150);
+            } else if (tabName === 'missing') {
+                document.getElementById('tab-missing').classList.add('active');
+                if(document.getElementById('nav-missing')) {
+                    document.getElementById('nav-missing').classList.add('bg-blue-600', 'text-white');
+                    document.getElementById('nav-missing').classList.remove('hover:bg-slate-700', 'text-slate-300');
+                }
+            } else if (tabName === 'hallticket') {
+                document.getElementById('tab-hallticket').classList.add('active');
+                if(document.getElementById('nav-hallticket')) {
+                    document.getElementById('nav-hallticket').classList.add('bg-blue-600', 'text-white');
+                    document.getElementById('nav-hallticket').classList.remove('hover:bg-slate-700', 'text-slate-300');
+                }
+            } else if (tabName === 'driver') {
+                document.getElementById('tab-driver').classList.add('active');
+                if(document.getElementById('nav-driver')) {
+                    document.getElementById('nav-driver').classList.add('bg-amber-600', 'text-slate-950');
+                    document.getElementById('nav-driver').classList.remove('hover:bg-slate-700', 'text-slate-300');
+                }
+                setTimeout(() => { if(driverMap) driverMap.invalidateSize(); }, 150);
+            } else if (tabName === 'admin') {
+                document.getElementById('tab-admin').classList.add('active');
+                if(document.getElementById('nav-admin')) {
+                    document.getElementById('nav-admin').classList.add('bg-purple-600', 'text-white');
+                    document.getElementById('nav-admin').classList.remove('hover:bg-slate-700', 'text-slate-300');
+                }
+                setTimeout(() => { if(adminMap) adminMap.invalidateSize(); }, 150);
+            }
+        }
+
+        let isFullscreen = false;
+        let fullscreenMap = null;
+
+        function toggleFullscreenMap() {
+            const modal = document.getElementById('map-modal');
+            isFullscreen = !isFullscreen;
+            if (isFullscreen) {
+                modal.classList.add('active');
+                if (!fullscreenMap) {
+                    fullscreenMap = L.map('fullscreen-map').setView([9.2200, 76.6000], 12);
+                    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { maxZoom: 19 }).addTo(fullscreenMap);
+                    baseStops.forEach(stop => L.marker(stop.coords).addTo(fullscreenMap).bindPopup(stop.name));
+                    L.polyline(routePath, { color: isDetourActive ? '#f59e0b' : '#2563eb', weight: 5 }).addTo(fullscreenMap);
+                }
+                setTimeout(() => { fullscreenMap.invalidateSize(); }, 150);
+            } else {
+                modal.classList.remove('active');
+            }
+        }
+
+        function callDriver() {
+            alert("📞 Connecting to Bus 06 Driver (Driver Suresh: +91 9447XXXXXX)...");
+        }
+
+        function driverUpdateStatus() {
+            const checkpoint = document.getElementById('driver-checkpoint').value;
+            alert(`✅ GPS Status Broadcasted Successfully!\nBus 06 current checkpoint updated to: ${checkpoint}`);
+        }
+
+        function triggerSOS() {
+            if (confirm("🚨 EMERGENCY SOS: Do you want to immediately dispatch an emergency alert to the college transport desk and security?")) {
+                alert("🚨 SOS Alert Sent! College transport cell and Bus 06 driver have been notified with your current GPS location.");
+            }
+        }
+
+        function submitMissingItem(event) {
+            event.preventDefault();
+            const name = document.getElementById('item-name').value;
+            
+            const listContainer = document.getElementById('missing-items-list');
+            const newItemHtml = `
+                <div class="bg-slate-900 p-3 rounded border border-slate-800 flex justify-between items-center animate-pulse">
+                    <div>
+                        <span class="font-bold text-white">${name}</span> — <span class="text-slate-400">Reported recently</span>
+                    </div>
+                    <span class="bg-blue-600 text-white font-bold px-2 py-0.5 rounded text-[10px]">Broadcasted to Driver</span>
+                </div>
+            `;
+            listContainer.insertAdjacentHTML('afterbegin', newItemHtml);
+            alert("✅ Your missing item report has been successfully sent to the Bus 06 conductor!");
+            event.target.reset();
+        }
+
+        function getClockTime(minsAhead) {
+            const now = new Date();
+            now.setMinutes(now.getMinutes() + minsAhead);
+            return now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+        }
+
+        // 🤖 Advanced Natural Language AI Chatbot Engine
+        function toggleChatbot() {
+            const windowElem = document.getElementById('chat-window');
+            windowElem.classList.toggle('hidden');
+        }
+
+        function handleChatKey(e) {
+            if (e.key === 'Enter') sendChatMessage();
+        }
+
+        function sendChatMessage() {
+            const input = document.getElementById('chat-input');
+            const text = input.value.trim();
+            if (!text) return;
+
+            const chatMsgs = document.getElementById('chat-messages');
+            chatMsgs.insertAdjacentHTML('beforeend', `<div class="bg-blue-600 text-white p-2.5 rounded-lg rounded-tr-none ml-auto max-w-[85%]">${text}</div>`);
+            input.value = '';
+            chatMsgs.scrollTop = chatMsgs.scrollHeight;
+
+            // Smart NLP Inference & Response Generation
+            setTimeout(() => {
+                const q = text.toLowerCase();
+                let reply = "";
+
+                if (q.includes('where') || q.includes('location') || q.includes('place') || q.includes('position') || q.includes('track') || q.includes('status')) {
+                    reply = `📍 Bus 06 is currently on route. Current location telemetry: Near Kattanam / Karimulakal checkpoints. Status: ${isDetourActive ? "⚠️ Rerouted via Western Bypass" : "✅ Normal operation on schedule"}.`;
+                } 
+                else if (q.includes('time') || q.includes('eta') || q.includes('reach') || q.includes('when') || q.includes('schedule')) {
+                    reply = `🕒 Timetable & ETAs:\n• Next Stop Arrival: ~8 mins\n• St. Thomas College Arrival: ~25-30 mins (${getClockTime(30)})\n• Bus frequency: On time.`;
+                } 
+                else if (q.includes('seat') || q.includes('occupancy') || q.includes('capacity') || q.includes('free') || q.includes('crowd')) {
+                    reply = `🪑 Seat Availability on Bus 06:\n• Occupied Seats: ${currentOccupiedSeats} / ${totalSeats}\n• Available Free Seats: ${totalSeats - currentOccupiedSeats}\n• Status: ${totalSeats - currentOccupiedSeats > 0 ? "Seats Available ✅" : "Bus Full ❌"}`;
+                } 
+                else if (q.includes('hall') || q.includes('ticket') || q.includes('exam') || q.includes('seat bench')) {
+                    reply = `🎫 Verified Hall Ticket Details (Devanandana Suresh):\n• Register No: MUT21CS042\n• Exam Center: St. Thomas College of Engineering, Kozhuvalloor\n• Hall No: LH-304 (Second Floor)\n• Bench: #14`;
+                } 
+                else if (q.includes('driver') || q.includes('conductor') || q.includes('suresh')) {
+                    reply = `👨‍✈️ Driver Details:\n• Driver Name: Suresh Kumar\n• Assigned Bus: Bus 06\n• Route: Kattanam ➔ St. Thomas College\n• Contact: +91 9447XXXXXX`;
+                } 
+                else if (q.includes('missing') || q.includes('lost') || q.includes('item') || q.includes('found') || q.includes('umbrella') || q.includes('bottle')) {
+                    reply = `📦 Lost & Found:\nYou can submit a missing item report via the 'Missing Items' tab in your student dashboard. Recently logged: Blue Water Bottle (with conductor at Charummodu stop).`;
+                } 
+                else if (q.includes('detour') || q.includes('traffic') || q.includes('road') || q.includes('closure') || q.includes('block') || q.includes('reroute')) {
+                    reply = `🚧 Traffic & Rerouting Status:\n${isDetourActive ? "⚠️ Detour is currently ACTIVE. Bus 06 is bypassing blocked roads via the Western Bypass corridor." : "🛣️ All roads are clear. No detours active."}`;
+                } 
+                else if (q.includes('sos') || q.includes('emergency') || q.includes('help') || q.includes('danger') || q.includes('police') || q.includes('accident')) {
+                    reply = `🚨 Emergency Support:\nIf you are facing an emergency, please use the red 'SOS ALERT' button on your dashboard to instantly notify the college transport cell and security with your GPS coordinates.`;
+                } 
+                else {
+                    reply = `🤖 I can answer any questions about Bus 06! You can ask me about:\n• "Where is the bus?"\n• "What is the seat availability?"\n• "Show my hall ticket"\n• "Driver details"\n• "Traffic or detours"\n• "Exam arrival times"`;
+                }
+
+                chatMsgs.insertAdjacentHTML('beforeend', `<div class="bg-slate-800 p-2.5 rounded-lg rounded-tl-none text-slate-200 max-w-[85%] whitespace-pre-line">${reply}</div>`);
+                chatMsgs.scrollTop = chatMsgs.scrollHeight;
+            }, 600);
+        }
+
+        // Bus Animation Loop
+        let currentSegment = 0;
+        let progress = 0;
+        let isAtStop = false;
+        let stopTimer = 0;
+        const speedFactor = 0.0015;
+
+        const locTextElem = document.getElementById('current-loc-text');
+        const nextStopElem = document.getElementById('next-stop-text');
+        const etaTextElem = document.getElementById('eta-display');
+        const etaLabelElem = document.getElementById('eta-label');
+        const collegeEtaElem = document.getElementById('college-eta-display');
+        const badgeElem = document.getElementById('bus-status-badge');
+
+        function animateBus() {
+            const totalSegs = routePath.length - 1;
+            const isReturning = currentSegment >= outboundPath.length - 1;
+            
+            let currStopIdx = currentSegment % outboundPath.length;
+            let nextStopIdx = (currStopIdx + 1) % outboundPath.length;
+            if (isReturning) {
+                currStopIdx = (outboundPath.length - 1) - (currentSegment % outboundPath.length);
+                nextStopIdx = Math.max(0, currStopIdx - 1);
+            }
+
+            const currName = baseStops[currStopIdx] ? baseStops[currStopIdx].name : "Kattanam";
+            const nextName = baseStops[nextStopIdx] ? baseStops[nextStopIdx].name : "St. Thomas College";
+
+            if (!isAtStop) {
+                if (currentSegment < totalSegs) {
+                    const startCoord = routePath[currentSegment];
+                    const endCoord = routePath[currentSegment + 1];
+
+                    progress += speedFactor;
+                    if (progress >= 1) {
+                        progress = 1;
+                        isAtStop = true;
+                        stopTimer = 0;
+                    } else {
+                        const lat = startCoord[0] + (endCoord[0] - startCoord[0]) * progress;
+                        const lng = startCoord[1] + (endCoord[1] - startCoord[1]) * progress;
+                        
+                        if(busMarker) busMarker.setLatLng([lat, lng]);
+                        if(driverBusMarker) driverBusMarker.setLatLng([lat, lng]);
+                        if(adminBusMarker) adminBusMarker.setLatLng([lat, lng]);
+
+                        const remainingSegs = totalSegs - currentSegment;
+                        const nextStopMins = Math.max(2, Math.round(remainingSegs * 2.5));
+                        const collegeMins = Math.max(5, Math.round(remainingSegs * 4) + (isDetourActive ? 6 : 0));
+
+                        locTextElem.innerText = `📍 Current Location: Near ${currName}`;
+                        nextStopElem.innerText = `🔜 Next Stop: ${nextName}`;
+                        etaTextElem.innerText = `${nextStopMins} mins (${getClockTime(nextStopMins)})`;
+                        etaLabelElem.innerText = `Expected Arrival at Next Stop (${nextName})`;
+                        collegeEtaElem.innerText = `${collegeMins} mins (${getClockTime(collegeMins)})`;
+                        
+                        badgeElem.innerText = isReturning ? "Returning Trip" : (isDetourActive ? "Detour Route" : "Outbound Trip");
+                        badgeElem.className = isDetourActive ? "bg-amber-600 text-white text-[10px] px-2 py-0.5 rounded" : "bg-blue-600 text-white text-[10px] px-2 py-0.5 rounded";
+                    }
+                }
+            } else {
+                stopTimer += 0.016;
+                locTextElem.innerText = `📍 Bus stopped at: ${currName}`;
+                etaTextElem.innerText = `At Stop (0 mins)`;
+                etaLabelElem.innerText = `Boarding passengers at ${currName}`;
+                badgeElem.innerText = "At Stop";
+                badgeElem.className = "bg-amber-600 text-white text-[10px] px-2 py-0.5 rounded";
+
+                if (stopTimer > 2.0) {
+                    isAtStop = false;
+                    progress = 0;
+                    currentSegment++;
+                    if (currentSegment >= totalSegs) {
+                        setTimeout(() => {
+                            currentSegment = 0;
+                            progress = 0;
+                        }, 4000);
+                    }
+                }
+            }
+            requestAnimationFrame(animateBus);
+        }
+
+        requestAnimationFrame(animateBus);
+    </script>
+</body>
+</html>
